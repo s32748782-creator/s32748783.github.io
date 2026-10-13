@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280, user-scalable=no">
+<title>棒球記分板 · 主控台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --navy:#0a1830; --navy2:#0f2447; --navy3:#16305c;
+  --gold:#f5b800; --gold2:#e0a000; --cream:#fbe38a; --mute:#9fb0cc; --line:rgba(245,184,0,.28);
+}
+html,body{background:#000;width:100%;height:100%;overflow:hidden;
+  font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.app{width:1280px;height:760px;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:flex;flex-direction:column;background:var(--navy);overflow:hidden;box-shadow:0 0 100px rgba(0,0,0,.95)}
+[contenteditable]{outline:none;cursor:text}
+[contenteditable]:focus{outline:2px solid #fff;outline-offset:3px;border-radius:4px}
+
+/* ===== 記分板 ===== */
+.board{flex:0 0 490px;display:flex;flex-direction:column;justify-content:space-between;padding:16px 22px;background:linear-gradient(180deg,#0d1f3d 0%,#081428 100%)}
+.b-title{flex:none;height:50px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 22px;border-radius:8px;
+  background:
+   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%23c98f00' stroke-width='2' opacity='.5'%3E%3Cpath d='M0 20L60 30L90 8M60 30L80 60M150 0L170 25L230 15L260 40M170 25L190 60M300 0L310 30L370 20L400 35M310 30L330 60'/%3E%3C/g%3E%3C/svg%3E") 0 0/100% 100% no-repeat,
+   linear-gradient(180deg,#ffd23f,#f0b000)}
+.b-title-text{flex:1;min-width:0;font-size:22px;font-weight:900;letter-spacing:2px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b-title-live{flex:none;display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:15px;
+  background:var(--navy);color:#fff;font-size:13px;font-weight:900;letter-spacing:3px}
+.live-dot{width:9px;height:9px;border-radius:50%;background:#ff3b30;box-shadow:0 0 10px #ff3b30;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+
+/* 局數＋投手＋打者（同一列） */
+.b-info{flex:none;height:88px;display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(90deg,var(--navy2),#0a1d38)}
+.i-inning{flex:0 0 150px;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(180deg,#ffd23f,var(--gold2));color:var(--navy);font-weight:900;font-variant-numeric:tabular-nums}
+.i-inning #inningNum{font-size:56px;line-height:1}
+.i-inning .tri{font-size:24px}
+.i-pit,.i-bat{flex:1 1 0;min-width:0;display:flex;align-items:center;gap:14px;padding:0 22px}
+.i-pit{border-right:2px solid var(--line)}
+.p-badge{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:7px;background:linear-gradient(180deg,#ffd23f,var(--gold2));color:var(--navy);font-size:20px;font-weight:900}
+.p-no{flex:none;font-size:22px;font-weight:800;color:var(--mute)}
+.p-no:empty{display:none}
+.p-name{flex:1;min-width:0;font-size:30px;font-weight:800;color:#fff;letter-spacing:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.speed-display{flex:none;display:flex;align-items:baseline;gap:6px;color:var(--gold)}
+.speed-num{display:inline-block;min-width:84px;text-align:right;font-size:44px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.speed-unit{font-size:16px;font-weight:800;color:var(--mute)}
+.batter-order{flex:none;font-size:18px;font-weight:800;color:var(--mute)}
+.batter-order:empty{display:none}
+.batter-num{flex:none;display:grid;place-items:center;min-width:54px;height:42px;padding:0 12px;border-radius:6px;background:var(--gold);color:var(--navy);font-size:22px;font-weight:900}
+.batter-name{flex:1;min-width:0;font-size:30px;font-weight:800;color:#fff;letter-spacing:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.avg-lbl{flex:none;font-size:14px;font-weight:800;letter-spacing:2px;color:var(--mute)}
+.avg-val{flex:none;min-width:70px;font-size:28px;font-weight:900;color:var(--cream);font-variant-numeric:tabular-nums}
+
+/* 隊伍 */
+.b-teams{flex:none;height:176px;display:flex;gap:5px;border-radius:8px;overflow:hidden}
+.b-team{flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 24px;cursor:pointer;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--tc) 84%,#fff),var(--tc));box-shadow:inset 0 0 0 2px rgba(255,255,255,.16)}
+.b-team.away{--tc:#0f2447;--tn:#fff;--ts:#f5b800}
+.b-team.home{--tc:#f0b000;--tn:#0a1830;--ts:#0a1830}
+.team-name{flex:0 1 auto;min-width:60px;margin:0 auto;text-align:center;font-size:48px;font-weight:900;letter-spacing:4px;color:var(--tn);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-score{flex:0 0 120px;text-align:center;font-size:100px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;color:var(--ts)}
+.b-bases{flex:0 0 250px;display:grid;place-items:center;background:linear-gradient(180deg,#0f2447,#081428);box-shadow:inset 0 0 0 2px var(--line)}
+.diamond{position:relative;width:170px;height:170px}
+.base,.plate{position:absolute;width:38px;height:38px;background:#1b2e52;border:2px solid #34507f;transition:all .24s}
+.base{transform:rotate(45deg);border-radius:3px}
+.base[data-base="1"]{left:66px;top:6px}      /* 二壘 */
+.base[data-base="2"]{left:10px;top:62px}     /* 三壘 */
+.base[data-base="0"]{left:122px;top:62px}    /* 一壘 */
+.plate{left:66px;top:122px;border:none;background:#fff;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%)}
+.base.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 22px rgba(245,184,0,.95)}
+
+.b-bases .diamond{transform:scale(.88)}
+
+/* 好壞球 */
+.b-count{flex:none;height:84px;display:flex;align-items:center;border-radius:8px;background:linear-gradient(90deg,var(--navy2),#0a1d38);border:1px solid var(--line)}
+.cnt-group{flex:1 1 0;height:56px;display:flex;align-items:center;justify-content:center;gap:18px}
+.cnt-group+.cnt-group{border-left:2px solid var(--line)}
+.cnt-lbl{font-size:40px;font-weight:900;color:var(--mute)}
+.dots{display:flex;gap:14px}
+.lamp{width:38px;height:38px;border-radius:50%;background:#14243f;border:3px solid #2c4470;transition:all .22s}
+.cnt-group[data-type="ball"] .lamp.on{background:#2ecc40;border-color:#2ecc40;box-shadow:0 0 18px rgba(46,204,64,.95)}
+.cnt-group[data-type="strike"] .lamp.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 18px rgba(245,184,0,.95)}
+.cnt-group[data-type="out"] .lamp.on{background:#ff3b30;border-color:#ff3b30;box-shadow:0 0 18px rgba(255,59,48,.95)}
+
+/* ===== 控制面板 ===== */
+.panel{flex:0 0 270px;display:flex;flex-direction:column;gap:12px;padding:16px 28px;
+  background:linear-gradient(180deg,#0b1730,#060e1f);border-top:3px solid var(--gold)}
+.panel-row{flex:1;min-height:0;display:flex;align-items:stretch;justify-content:center;gap:10px}
+.cg{flex:1 1 0;min-width:0;max-width:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:6px 8px;
+  border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(245,184,0,.16)}
+.cg.wide{flex:1.25 1 0}
+.cg-label{font-size:14px;font-weight:800;letter-spacing:1.5px;color:var(--mute);white-space:nowrap}
+.cg-ctrl{display:flex;align-items:center;gap:6px}
+.cb{flex:none;width:42px;height:42px;border-radius:10px;border:1px solid #2c4470;background:linear-gradient(180deg,#1b2d4f,#12203a);
+  color:#fff;font-family:inherit;font-size:20px;font-weight:900;cursor:pointer;user-select:none;display:grid;place-items:center;transition:background .12s,transform .08s}
+.cb:hover{background:linear-gradient(180deg,#263d68,#182a4a)}
+.cb:active{transform:scale(.93)}
+.cb-wide{width:auto;padding:0 22px;font-size:17px;letter-spacing:1px}
+.cv-input{width:60px;height:42px;text-align:center;font-family:inherit;font-size:26px;font-weight:900;color:#fff;background:rgba(0,0,0,.4);
+  border:1px solid rgba(245,184,0,.25);border-radius:10px;outline:none;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+.cv-input::-webkit-outer-spin-button,.cv-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cv-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,184,0,.25)}
+.cv-input.narrow{width:48px}
+.cv-inning-wrap{display:flex;align-items:center;gap:4px}
+.cv-half{font-size:20px;font-weight:900;color:var(--gold);min-width:20px;text-align:center}
+.cg.away .cv-input,.cg.strike .cv-input,.cg.speed .cv-input,.cg.home .cv-input{color:var(--gold)}
+.cg.ball .cv-input{color:#2ecc40}
+.cg.out .cv-input{color:#ff5a50}
+.cg.pitch .cv-input{color:var(--cream)}
+
+/* 壘包控制：菱形排列 */
+.bp{display:grid;grid-template-columns:repeat(3,38px);grid-template-rows:repeat(2,36px);gap:4px 8px;justify-items:center;align-items:center}
+.bp .cb{width:38px;height:36px;font-size:15px;color:var(--mute);border-radius:8px}
+.bp .b2{grid-column:2;grid-row:1}
+.bp .b3{grid-column:1;grid-row:2}
+.bp-home{grid-column:2;grid-row:2;width:26px;height:26px;background:#fff;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%)}
+.bp .b1{grid-column:3;grid-row:2}
+.cb.on{background:linear-gradient(180deg,#ffd23f,var(--gold2));border-color:var(--gold);color:var(--navy);box-shadow:0 0 14px rgba(245,184,0,.8)}
+
+[hidden]{display:none!important}
+.cg.batter{flex:1.4 1 0;max-width:320px}
+.bat-disp{width:128px;height:42px;line-height:40px;text-align:center;padding:0 6px;border-radius:10px;background:rgba(0,0,0,.4);border:1px solid rgba(245,184,0,.25);color:var(--cream);font-size:17px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 隊色選擇 */
+.pop{position:absolute;z-index:30;width:300px;padding:14px;border-radius:12px;background:#0b1730;border:2px solid var(--gold);box-shadow:0 14px 40px rgba(0,0,0,.7)}
+.pop-title{font-size:14px;font-weight:800;color:var(--mute);letter-spacing:1.5px;margin-bottom:10px}
+.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.sw{aspect-ratio:1;border-radius:50%;border:2px solid rgba(255,255,255,.35);cursor:pointer}
+.sw:hover{border-color:#fff;transform:scale(1.08)}
+.pop-custom{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:14px;font-weight:800;color:var(--mute)}
+.pop-custom input{width:64px;height:34px;border:none;background:none;cursor:pointer}
+
+/* 打序視窗 */
+.modal{position:absolute;inset:0;z-index:40;display:grid;place-items:center;background:rgba(3,8,20,.86)}
+.modal-box{width:1120px;height:700px;display:flex;flex-direction:column;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#0d1f3d,#081428);border:2px solid var(--gold)}
+.modal-head{flex:none;height:76px;display:flex;align-items:center;gap:24px;padding:0 24px;background:linear-gradient(180deg,#ffd23f,#f0b000);color:var(--navy)}
+.modal-title{font-size:24px;font-weight:900;letter-spacing:2px}
+.tabs{display:flex;gap:8px;margin-right:auto}
+.tab{height:42px;padding:0 20px;border-radius:10px;border:2px solid var(--navy);background:transparent;color:var(--navy);font:inherit;font-size:17px;font-weight:900;cursor:pointer}
+.tab.on{background:var(--navy);color:var(--gold)}
+.modal-body{flex:1;min-height:0;display:flex;gap:24px;padding:24px}
+.modal-left{flex:0 0 380px;display:flex;flex-direction:column;gap:12px}
+.modal-left textarea{flex:1;min-height:0;resize:none;padding:14px;border-radius:10px;background:rgba(0,0,0,.4);border:1px solid rgba(245,184,0,.3);color:#fff;font:inherit;font-size:17px;line-height:1.6;outline:none}
+.modal-left textarea:focus{border-color:var(--gold)}
+.modal-btns{display:flex;gap:10px}
+.mb{flex:1;height:46px;border-radius:10px;border:1px solid #2c4470;background:linear-gradient(180deg,#1b2d4f,#12203a);color:#fff;font:inherit;font-size:16px;font-weight:800;cursor:pointer}
+.mb.gold{background:linear-gradient(180deg,#ffd23f,var(--gold2));border-color:var(--gold);color:var(--navy)}
+.hint{font-size:14px;line-height:1.6;color:var(--mute)}
+.modal-right{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.lineup-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:6px}
+.lrow{flex:none;display:grid;grid-template-columns:34px 70px 84px 1fr 90px;align-items:center;height:52px;padding:0 18px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(245,184,0,.16);color:#fff;font-size:22px;font-weight:800;cursor:pointer}
+.lrow:hover{border-color:var(--gold)}
+.lrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow .lh,.lrow .lo{color:var(--mute)}
+.lrow.cur{background:linear-gradient(90deg,#ffd23f,var(--gold2));color:var(--navy)}
+.lrow.cur .lh,.lrow.cur .lo{color:var(--navy)}
+.lempty{padding:40px;text-align:center;color:var(--mute);font-size:18px}
+.lrow.p{grid-template-columns:90px 1fr}
+.lrow.drag{opacity:.35}
+.lrow.over{border-color:#fff;box-shadow:0 -3px 0 var(--gold)}
+.lh{cursor:grab;font-size:18px}
+.ldiv{flex:none;margin:8px 0 2px;font-size:14px;font-weight:800;letter-spacing:2px;color:var(--gold)}
+.tabs.mode{margin-right:12px;padding-right:20px;border-right:2px solid rgba(10,24,48,.35)}
+.cb-sm{padding:0 14px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <div class="board">
+    <div class="b-title">
+      <div class="b-title-text" contenteditable="true" spellcheck="false">2026 季後挑戰賽 · GAME 4</div>
+      <div class="b-title-live"><span class="live-dot"></span>LIVE</div>
+    </div>
+
+    <div class="b-info">
+      <div class="i-inning"><span id="inningNum">2</span><span class="tri" id="halfIcon">▲</span></div>
+      <div class="i-pit">
+        <span class="p-badge">P</span>
+        <span class="p-no" id="pNo" contenteditable="true" spellcheck="false"></span>
+        <span class="p-name" id="pName" contenteditable="true" spellcheck="false">布雷克</span>
+        <div class="speed-display"><span class="speed-num" id="speedNum">122</span><span class="speed-unit">km/h</span></div>
+      </div>
+      <div class="i-bat">
+        <span class="batter-order" id="batOrder"></span>
+        <span class="batter-num" id="batNum" contenteditable="true" spellcheck="false">8</span>
+        <span class="batter-name" id="batName" contenteditable="true" spellcheck="false">黃韋盛</span>
+        <span class="avg-lbl">AVG</span>
+        <span class="avg-val" id="avgVal" contenteditable="true" spellcheck="false">.300</span>
+      </div>
+    </div>
+
+    <div class="b-teams">
+      <div class="b-team away">
+        <div class="team-name" contenteditable="true" spellcheck="false">台壽霸龍</div>
+        <div class="team-score" id="scoreAway">0</div>
+      </div>
+      <div class="b-team home">
+        <div class="team-name" contenteditable="true" spellcheck="false">中信兄弟</div>
+        <div class="team-score" id="scoreHome">0</div>
+      </div>
+      <div class="b-bases">
+        <div class="diamond">
+          <div class="base" data-base="1"></div>
+          <div class="base" data-base="2"></div>
+          <div class="base" data-base="0"></div>
+          <div class="plate"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-count">
+      <div class="cnt-group" data-type="ball"><span class="cnt-lbl">B</span><div class="dots"><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span></div></div>
+      <div class="cnt-group" data-type="strike"><span class="cnt-lbl">S</span><div class="dots"><span class="lamp"></span><span class="lamp"></span></div></div>
+      <div class="cnt-group" data-type="out"><span class="cnt-lbl">O</span><div class="dots"><span class="lamp"></span><span class="lamp"></span></div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-row">
+      <div class="cg away"><span class="cg-label">客隊分數</span><div class="cg-ctrl">
+        <button class="cb" data-act="away-">−</button><input class="cv-input" data-key="away" type="text" inputmode="numeric" value="0"><button class="cb" data-act="away+">＋</button></div></div>
+      <div class="cg home"><span class="cg-label">主隊分數</span><div class="cg-ctrl">
+        <button class="cb" data-act="home-">−</button><input class="cv-input" data-key="home" type="text" inputmode="numeric" value="0"><button class="cb" data-act="home+">＋</button></div></div>
+      <div class="cg inning"><span class="cg-label">局數／半局</span><div class="cg-ctrl">
+        <button class="cb" data-act="inn-">◀</button>
+        <div class="cv-inning-wrap"><input class="cv-input narrow" data-key="inning" type="text" inputmode="numeric" value="2"><span class="cv-half" id="cvHalf">上</span></div>
+        <button class="cb" data-act="inn+">▶</button></div></div>
+      <div class="cg ball"><span class="cg-label">壞球 B</span><div class="cg-ctrl">
+        <button class="cb" data-act="ball-">−</button><input class="cv-input" data-key="ball" type="text" inputmode="numeric" value="0"><button class="cb" data-act="ball+">＋</button></div></div>
+      <div class="cg strike"><span class="cg-label">好球 S</span><div class="cg-ctrl">
+        <button class="cb" data-act="strike-">−</button><input class="cv-input" data-key="strike" type="text" inputmode="numeric" value="0"><button class="cb" data-act="strike+">＋</button></div></div>
+      <div class="cg out"><span class="cg-label">出局 O</span><div class="cg-ctrl">
+        <button class="cb" data-act="out-">−</button><input class="cv-input" data-key="out" type="text" inputmode="numeric" value="0"><button class="cb" data-act="out+">＋</button></div></div>
+    </div>
+
+    <div class="panel-row">
+      <div class="cg speed"><span class="cg-label">球速 km/h</span><div class="cg-ctrl">
+        <button class="cb" data-act="speed-">−</button><input class="cv-input" data-key="speed" type="text" inputmode="numeric" value="122"><button class="cb" data-act="speed+">＋</button></div></div>
+      <div class="cg wide"><span class="cg-label">壘包</span>
+        <div class="bp">
+          <button class="cb b2" data-act="base1">二</button>
+          <button class="cb b3" data-act="base2">三</button>
+          <span class="bp-home" title="本壘"></span>
+          <button class="cb b1" data-act="base0">一</button>
+        </div></div>
+      <div class="cg batter"><span class="cg-label">打者</span><div class="cg-ctrl">
+        <button class="cb" data-act="bat-">◀</button><div class="bat-disp" id="batDisp">未匯入打序</div><button class="cb" data-act="bat+">▶</button></div></div>
+      <div class="cg"><span class="cg-label">名單匯入／選擇</span><div class="cg-ctrl"><button class="cb cb-wide cb-sm" data-act="lineup-bat">打序</button><button class="cb cb-wide cb-sm" data-act="lineup-pit">投手</button></div></div>
+      <div class="cg"><span class="cg-label">重置</span><div class="cg-ctrl"><button class="cb cb-wide" data-act="reset">↺ 重置</button></div></div>
+    </div>
+  </div>
+
+  <div class="pop" id="pop" hidden>
+    <div class="pop-title">選擇隊色</div>
+    <div class="swatches" id="swatches"></div>
+    <label class="pop-custom">自訂顏色<input type="color" id="customColor" value="#0f2447"></label>
+  </div>
+
+  <div class="modal" id="lineupModal" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">名單設定</div>
+        <div class="tabs mode"><button class="tab on" id="modeBat">打序</button><button class="tab" id="modePit">投手</button></div>
+        <div class="tabs"><button class="tab on" id="tabAway" data-tab="away"></button><button class="tab" id="tabHome" data-tab="home"></button></div>
+        <button class="cb" id="lineupClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-left">
+          <div class="hint" id="lineupHint"></div>
+          <textarea id="lineupText" spellcheck="false"></textarea>
+          <div class="modal-btns">
+            <button class="mb gold" id="lineupImport">匯入</button>
+            <button class="mb" id="lineupFile">選擇檔案</button>
+            <button class="mb" id="lineupClear">清空</button>
+          </div>
+          <div class="hint" id="lineupMsg"></div>
+          <input type="file" id="lineupFileInput" accept=".csv,.txt,.tsv" hidden>
+        </div>
+        <div class="modal-right">
+          <div class="hint" id="listHint"></div>
+          <div class="lineup-list" id="lineupList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+
+  const LIMITS = {
+    away:{min:0,max:199}, home:{min:0,max:199}, inning:{min:1,max:99},
+    ball:{min:0,max:3}, strike:{min:0,max:2}, out:{min:0,max:2}, speed:{min:100,max:180}
+  };
+  const state = {away:0,home:0,inning:2,half:'top',ball:0,strike:0,out:0,speed:122,bases:[false,false,false]};
+  const lineups = {away:[], home:[]}, pitchers = {away:[], home:[]};
+  const idx = {away:-1, home:-1}, pidx = {away:-1, home:-1}, colors = {};
+  let scale = 1, tab = 'away', mode = 'bat', colorTarget = 'away', dragFrom = -1;
+
+  const store = {
+    get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+    set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+  const side = () => state.half==='top' ? 'away' : 'home';      /* 進攻方 */
+  const defSide = () => state.half==='top' ? 'home' : 'away';   /* 防守方（投手所屬） */
+  const teamName = k => document.querySelectorAll('.team-name')[k==='away'?0:1].textContent.trim() || (k==='away'?'客隊':'主隊');
+  const save = () => store.set('sb_lineups', {lineups, pitchers, idx, pidx});
+  const renumber = l => l.forEach((p,i)=>{ p.no = i<9 ? i+1 : 0; });   /* 只有前 9 位有棒次 */
+
+  /* ---------- 渲染 ---------- */
+  function renderBoardOnly(){
+    $('scoreAway').textContent = state.away;
+    $('scoreHome').textContent = state.home;
+    $('inningNum').textContent = state.inning;
+    $('halfIcon').textContent = state.half==='top' ? '▲' : '▼';
+    $('speedNum').textContent = state.speed;
+    document.querySelectorAll('.cnt-group').forEach(g=>{
+      const c = state[g.dataset.type];
+      g.querySelectorAll('.lamp').forEach((d,i)=>d.classList.toggle('on', i<c));
+    });
+  }
+  function render(){
+    renderBoardOnly();
+    $('cvHalf').textContent = state.half==='top' ? '上' : '下';
+    document.querySelectorAll('.base').forEach(b=>b.classList.toggle('on', state.bases[+b.dataset.base]));
+    document.querySelectorAll('.bp .cb').forEach(b=>{
+      const m = b.dataset.act.match(/^base(\d)$/);
+      b.classList.toggle('on', !!(m && state.bases[+m[1]]));
+    });
+    document.querySelectorAll('.cv-input').forEach(inp=>{
+      if(document.activeElement===inp) return;
+      inp.value = state[inp.dataset.key];
+    });
+    const s = side(), l = lineups[s], p = l[idx[s]];
+    $('batDisp').textContent = p ? (p.no ? p.no+'棒 ' : '後補 ') + p.name : (l.length ? '選擇打者' : '未匯入打序');
+  }
+
+  /* ---------- 打者／投手上場 ---------- */
+  function applyBatter(){
+    const s = side(), p = lineups[s][idx[s]];
+    if(!p) return;
+    $('batOrder').textContent = p.no ? p.no + '棒' : '後補';
+    $('batNum').textContent = p.num;
+    $('batName').textContent = p.name;
+    $('avgVal').textContent = p.avg;
+  }
+  function applyPitcher(){
+    const k = defSide(), p = pitchers[k][pidx[k]];
+    if(!p) return;
+    $('pName').textContent = p.name;
+    $('pNo').textContent = p.num ? '#' + p.num : '';
+  }
+  function moveBatter(d){
+    const s = side(), l = lineups[s], n = Math.min(9, l.length);
+    if(!n){ openLineup('bat'); return; }
+    let i = idx[s];
+    if(i<0 || i>=n) i = d>0 ? 0 : n-1; else i = (i+d+n)%n;
+    idx[s] = i; save(); applyBatter(); render();
+  }
+
+  /* ---------- 動作 ---------- */
+  function step(key,d){
+    const l = LIMITS[key];
+    state[key] = Math.min(l.max, Math.max(l.min, state[key]+d));
+  }
+  function act(a){
+    const m = a.match(/^(away|home|ball|strike|out|speed)([+-])$/);
+    if(m){ step(m[1], m[2]==='+' ? 1 : -1); render(); return; }
+    switch(a){
+      case 'inn-':
+        if(state.half==='bottom') state.half='top';
+        else if(state.inning>1){ state.inning--; state.half='bottom'; }
+        applyBatter(); applyPitcher(); break;
+      case 'inn+':
+        if(state.half==='top') state.half='bottom';
+        else if(state.inning<99){ state.inning++; state.half='top'; }
+        applyBatter(); applyPitcher(); break;
+      case 'base0': case 'base1': case 'base2':
+        { const i = +a.slice(4); state.bases[i] = !state.bases[i]; } break;
+      case 'bat-': moveBatter(-1); return;
+      case 'bat+': moveBatter(1); return;
+      case 'lineup-bat': openLineup('bat'); return;
+      case 'lineup-pit': openLineup('pit'); return;
+      case 'reset':
+        if(!window.confirm('確定要重置比分、局數、球數與壘包嗎？（名單不會被清除）')) return;
+        Object.assign(state,{away:0,home:0,inning:1,half:'top',ball:0,strike:0,out:0,speed:122,bases:[false,false,false]});
+        break;
+    }
+    render();
+  }
+  document.querySelector('.panel').addEventListener('click', e=>{
+    const btn = e.target.closest('button');
+    if(btn && btn.dataset.act) act(btn.dataset.act);
+  });
+
+  /* ---------- 數字輸入框 ---------- */
+  document.querySelectorAll('.cv-input').forEach(inp=>{
+    const key = inp.dataset.key, lim = LIMITS[key];
+    inp.addEventListener('input', ()=>{
+      const raw = inp.value.replace(/\D/g,'');
+      if(raw==='') return;
+      state[key] = Math.min(lim.max, Math.max(lim.min, parseInt(raw,10)));
+      renderBoardOnly();
+    });
+    inp.addEventListener('blur', render);
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key==='Escape') inp.blur(); });
+    inp.addEventListener('focus', ()=>inp.select());
+  });
+
+  /* ---------- 可編輯文字 ---------- */
+  document.querySelectorAll('[contenteditable]').forEach(el=>{
+    el.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } });
+    el.addEventListener('paste', e=>{
+      e.preventDefault();
+      document.execCommand('insertText', false, (e.clipboardData||window.clipboardData).getData('text').replace(/\s+/g,' '));
+    });
+  });
+
+  /* ---------- 隊色 ---------- */
+  const PRESETS = [
+    {n:'霸龍',bg:'#0f2447',fg:'#ffffff',sc:'#f5b800'},
+    {n:'金黃',bg:'#f0b000',fg:'#0a1830',sc:'#0a1830'},
+    {n:'橘',bg:'#f26a00',fg:'#ffffff',sc:'#ffffff'},
+    {n:'酒紅',bg:'#8e1030',fg:'#ffffff',sc:'#ffffff'},
+    {n:'藍',bg:'#0b4ea2',fg:'#ffffff',sc:'#ffffff'},
+    {n:'綠',bg:'#0e6b4a',fg:'#ffffff',sc:'#ffffff'},
+    {n:'紅',bg:'#d62828',fg:'#ffffff',sc:'#ffffff'},
+    {n:'天藍',bg:'#1f8ce0',fg:'#ffffff',sc:'#ffffff'},
+    {n:'白',bg:'#f2f2f2',fg:'#0a1830',sc:'#0a1830'},
+    {n:'黑',bg:'#14181f',fg:'#ffffff',sc:'#ffffff'}
+  ];
+  function setTeamColor(k,c){
+    const b = document.querySelector('.b-team.'+k);
+    b.style.setProperty('--tc', c.bg); b.style.setProperty('--tn', c.fg); b.style.setProperty('--ts', c.sc);
+    colors[k] = c; store.set('sb_colors', colors);
+  }
+  function autoColor(hex){
+    const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    const f = (0.299*r+0.587*g+0.114*b)/255 > 0.6 ? '#0a1830' : '#ffffff';
+    return {bg:hex, fg:f, sc:f};
+  }
+  const pop = $('pop');
+  PRESETS.forEach(c=>{
+    const b = document.createElement('button');
+    b.className='sw'; b.title=c.n; b.style.background=c.bg;
+    b.addEventListener('click', ()=>{ setTeamColor(colorTarget, c); pop.hidden=true; });
+    $('swatches').appendChild(b);
+  });
+  $('customColor').addEventListener('input', e=>setTeamColor(colorTarget, autoColor(e.target.value)));
+  document.querySelectorAll('.b-team').forEach(b=>b.addEventListener('click', e=>{
+    if(e.target.closest('[contenteditable]')) return;
+    colorTarget = b.classList.contains('away') ? 'away' : 'home';
+    const ar = $('app').getBoundingClientRect(), br = b.getBoundingClientRect();
+    pop.style.left = Math.min(1280-320, (br.left-ar.left)/scale + 10) + 'px';
+    pop.style.top = ((br.bottom-ar.top)/scale - 10) + 'px';
+    pop.hidden = false;
+    e.stopPropagation();
+  }));
+  document.addEventListener('click', e=>{ if(!pop.hidden && !pop.contains(e.target)) pop.hidden = true; });
+
+  /* ---------- 名單解析 ---------- */
+  const tokens = line => line.split(/[\t,，、;；\s]+/).filter(Boolean);
+  const isHead = t => /^(棒次|背號|投手|姓名|order|no|name)/i.test(t[0]);
+  function parseBat(text){
+    const out = [];
+    text.split(/\r?\n/).forEach(raw=>{
+      const t = tokens(raw.trim()); if(!t.length || isHead(t)) return;
+      const nums = [];
+      while(t.length && /^(\d+|[-—])$/.test(t[0]) && nums.length<2) nums.push(t.shift());
+      let avg = '---';
+      if(t.length>1 && /^\d?\.\d{1,3}$/.test(t[t.length-1])) avg = t.pop().replace(/^0(?=\.)/,'');
+      const name = t.join(' '); if(!name) return;
+      const two = nums.length===2;
+      out.push({
+        key: two ? parseInt(nums[0],10) || out.length+1 : out.length+1,
+        num: two ? (/^\d+$/.test(nums[1]) ? nums[1] : '') : (/^\d+$/.test(nums[0]||'') ? nums[0] : ''),
+        name, avg
+      });
+    });
+    out.sort((a,b)=>a.key-b.key);
+    out.forEach(p=>delete p.key);
+    renumber(out);
+    return out;
+  }
+  function parsePit(text){
+    const out = [];
+    text.split(/\r?\n/).forEach(raw=>{
+      const t = tokens(raw.trim()); if(!t.length || isHead(t)) return;
+      let num = '';
+      if(/^(\d+|[-—])$/.test(t[0]) && t.length>1) num = /^\d+$/.test(t[0]) ? t.shift() : (t.shift(), '');
+      const name = t.join(' '); if(name) out.push({num, name});
+    });
+    return out;
+  }
+  const fmtBat = l => l.map((p,i)=>{
+    const a = [i+1, p.num||'-', p.name]; if(/^\d?\.\d+$/.test(p.avg)) a.push(p.avg); return a.join(' ');
+  }).join('\n');
+  const fmtPit = l => l.map(p=>(p.num||'-') + ' ' + p.name).join('\n');
+
+  /* ---------- 名單視窗 ---------- */
+  const list = () => mode==='bat' ? lineups[tab] : pitchers[tab];
+  const cur = () => mode==='bat' ? idx : pidx;
+  const defTab = () => mode==='bat' ? side() : defSide();
+
+  function renderModal(){
+    $('tabAway').textContent = '客隊 ' + teamName('away');
+    $('tabHome').textContent = '主隊 ' + teamName('home');
+    $('tabAway').classList.toggle('on', tab==='away');
+    $('tabHome').classList.toggle('on', tab==='home');
+    $('modeBat').classList.toggle('on', mode==='bat');
+    $('modePit').classList.toggle('on', mode==='pit');
+    $('lineupHint').textContent = mode==='bat'
+      ? '每行一位球員：棒次 背號 姓名 打擊率（棒次、打擊率可省略）。前 9 位為先發打序，其餘自動放在後補。可直接從 Excel 貼上，或選擇 .csv / .txt 檔。'
+      : '每行一位投手：背號 姓名（背號可省略）。可直接從 Excel 貼上，或選擇 .csv / .txt 檔。';
+    $('lineupText').placeholder = mode==='bat' ? '1 8 黃韋盛 .300\n2 25 王柏融 .285\n3 52 陳傑憲 .310' : '17 布雷克\n31 王小明';
+    $('listHint').textContent = mode==='bat' ? '拖動 ⋮⋮ 調整棒次（第 9 位以後為後補），點選球員設為目前打者' : '點選投手設為目前投手';
+    loadText(); renderList();
+  }
+  function loadText(){ $('lineupText').value = mode==='bat' ? fmtBat(lineups[tab]) : fmtPit(pitchers[tab]); }
+  function mk(cls, txt){ const e = document.createElement('span'); if(cls) e.className = cls; e.textContent = txt; return e; }
+
+  function renderList(){
+    const box = $('lineupList'); box.textContent = '';
+    const l = list();
+    if(!l.length){
+      const d = document.createElement('div'); d.className='lempty'; d.textContent = mode==='bat' ? '尚未匯入打序' : '尚未匯入投手';
+      box.appendChild(d); return;
+    }
+    l.forEach((p,i)=>{
+      if(mode==='bat' && i===9 && l.length>9){
+        const dv = document.createElement('div'); dv.className='ldiv'; dv.textContent='後補名單';
+        dv.addEventListener('dragover', e=>e.preventDefault());
+        dv.addEventListener('drop', e=>{ e.preventDefault(); e.stopPropagation(); moveLineup(dragFrom, Math.min(9, l.length-1)); });
+        box.appendChild(dv);
+      }
+      const r = document.createElement('div');
+      r.className = 'lrow' + (mode==='pit' ? ' p' : '') + (i===cur()[tab] ? ' cur' : '');
+      if(mode==='bat'){
+        r.append(mk('lh','⋮⋮'), mk('lo', p.no ? p.no+'棒' : '後補'), mk('', p.num ? '#'+p.num : ''), mk('', p.name), mk('', p.avg));
+        r.draggable = true;
+        r.addEventListener('dragstart', e=>{ dragFrom = i; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(i)); r.classList.add('drag'); });
+        r.addEventListener('dragend', ()=>{ dragFrom = -1; document.querySelectorAll('.lrow.drag,.lrow.over').forEach(x=>x.classList.remove('drag','over')); });
+        r.addEventListener('dragover', e=>{ e.preventDefault(); r.classList.add('over'); });
+        r.addEventListener('dragleave', ()=>r.classList.remove('over'));
+        r.addEventListener('drop', e=>{ e.preventDefault(); e.stopPropagation(); moveLineup(dragFrom, i); });
+      } else {
+        r.append(mk('', p.num ? '#'+p.num : ''), mk('', p.name));
+      }
+      r.addEventListener('click', ()=>{
+        cur()[tab] = i; save();
+        if(mode==='bat') applyBatter(); else applyPitcher();
+        render(); closeLineup();
+      });
+      box.appendChild(r);
+    });
+  }
+  /* 拖到名單空白處＝移到最後 */
+  $('lineupList').addEventListener('dragover', e=>e.preventDefault());
+  $('lineupList').addEventListener('drop', e=>{ e.preventDefault(); moveLineup(dragFrom, lineups[tab].length-1); });
+
+  function moveLineup(from, to){
+    const l = lineups[tab];
+    if(mode!=='bat' || from<0 || to<0 || from===to || from>=l.length) return;
+    const now = l[idx[tab]];
+    const [p] = l.splice(from,1); l.splice(to,0,p);
+    renumber(l);
+    idx[tab] = now ? l.indexOf(now) : -1;
+    save(); renderList(); loadText();
+    if(tab===side()) applyBatter();
+    render();
+  }
+
+  function openLineup(m){
+    mode = m; tab = defTab(); renderModal();
+    $('lineupMsg').textContent = ''; $('lineupModal').hidden = false;
+  }
+  function closeLineup(){ $('lineupModal').hidden = true; }
+
+  function doImport(){
+    const txt = $('lineupText').value;
+    let n, msg;
+    if(mode==='bat'){
+      const l = parseBat(txt); n = l.length;
+      lineups[tab] = l; idx[tab] = n ? 0 : -1;
+      msg = n ? '已匯入 '+n+' 位球員（先發 '+Math.min(9,n)+' 位' + (n>9 ? '、後補 '+(n-9)+' 位' : '') + '），可拖動調整棒次。' : '';
+    } else {
+      const l = parsePit(txt); n = l.length;
+      pitchers[tab] = l; pidx[tab] = n ? 0 : -1;
+      msg = n ? '已匯入 '+n+' 位投手，點選右側投手即可上場。' : '';
+    }
+    save(); loadText(); renderList();
+    $('lineupMsg').textContent = msg || '沒有讀到資料，請確認格式。';
+    applyBatter(); applyPitcher(); render();
+  }
+  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.addEventListener('click', ()=>{
+    tab = t.dataset.tab; renderModal(); $('lineupMsg').textContent = '';
+  }));
+  $('modeBat').addEventListener('click', ()=>{ mode='bat'; tab=defTab(); renderModal(); $('lineupMsg').textContent=''; });
+  $('modePit').addEventListener('click', ()=>{ mode='pit'; tab=defTab(); renderModal(); $('lineupMsg').textContent=''; });
+  $('lineupImport').addEventListener('click', doImport);
+  $('lineupClear').addEventListener('click', ()=>{
+    if(mode==='bat'){ lineups[tab] = []; idx[tab] = -1; } else { pitchers[tab] = []; pidx[tab] = -1; }
+    save(); loadText(); renderList(); render(); $('lineupMsg').textContent = '已清空。';
+  });
+  $('lineupFile').addEventListener('click', ()=>$('lineupFileInput').click());
+  $('lineupFileInput').addEventListener('change', e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const fr = new FileReader();
+    fr.onload = ()=>{ $('lineupText').value = String(fr.result).replace(/^\uFEFF/,''); doImport(); };
+    fr.readAsText(f, 'utf-8');
+    e.target.value = '';
+  });
+  $('lineupClose').addEventListener('click', closeLineup);
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeLineup(); pop.hidden = true; } });
+
+  /* ---------- 縮放 ---------- */
+  function fit(){
+    scale = Math.min(innerWidth/1280, innerHeight/760);
+    $('app').style.transform = 'translate(-50%,-50%) scale(' + scale + ')';
+  }
+  addEventListener('resize', fit);
+
+  /* ---------- 啟動 ---------- */
+  const sl = store.get('sb_lineups');
+  if(sl){
+    ['away','home'].forEach(k=>{
+      if(sl.lineups && Array.isArray(sl.lineups[k])){
+        lineups[k] = sl.lineups[k]; renumber(lineups[k]);
+        idx[k] = (sl.idx && lineups[k][sl.idx[k]]) ? sl.idx[k] : (lineups[k].length ? 0 : -1);
+      }
+      if(sl.pitchers && Array.isArray(sl.pitchers[k])){
+        pitchers[k] = sl.pitchers[k];
+        pidx[k] = (sl.pidx && pitchers[k][sl.pidx[k]]) ? sl.pidx[k] : (pitchers[k].length ? 0 : -1);
+      }
+    });
+  }
+  const sc = store.get('sb_colors');
+  if(sc) ['away','home'].forEach(k=>{ if(sc[k]) setTeamColor(k, sc[k]); });
+  fit(); applyBatter(); applyPitcher(); render();
+})();
+</script>
+</body>
+</html>
