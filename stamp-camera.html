@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="日期相機">
+<title>日期相機</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #000;
+    --fg: #f2f2f2;
+    --muted: #9a9a9a;
+    --sheet: #1c1c1e;
+    --line: #3a3a3c;
+    --stamp: #ff8a1f;
+    --ok: #34c759;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) { --sheet: #f2f2f7; --fg2: #111; }
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; overflow: hidden; }
+  .app { position: relative; height: 100%; display: flex; flex-direction: column; }
+  .viewer { position: relative; flex: 1; overflow: hidden; }
+  video, .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .shot { display: none; background: #000; object-fit: contain; }
+  .live-stamp { position: absolute; right: 5%; bottom: 4%; pointer-events: none;
+    font: 700 clamp(16px, 5vw, 28px)/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .08em; }
+  .live-stamp.film { color: var(--stamp); text-shadow: 0 0 6px rgba(255,120,20,.8); }
+  .live-stamp.clean { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.8); letter-spacing: .02em; }
+  .msg { position: absolute; inset: 0; display: none; place-items: center; text-align: center;
+    padding: 2rem; color: var(--muted); line-height: 1.6; }
+  .bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 18px 24px 22px; background: var(--bg); }
+  .shutter { width: 74px; height: 74px; border-radius: 50%; border: 4px solid #fff;
+    background: #fff; background-clip: content-box; padding: 4px; cursor: pointer; }
+  .shutter:active { transform: scale(.93); }
+  .side { background: none; border: 0; color: var(--fg); font: inherit; font-size: 15px;
+    padding: 10px; cursor: pointer; }
+  .side.right { justify-self: end; }
+  .side.left { justify-self: start; }
+  .chip { display: inline-block; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  .chip.film { color: var(--stamp); border-color: var(--stamp); }
+  .review { display: none; gap: 10px; padding: 14px 16px 20px; background: var(--bg); flex-wrap: wrap; }
+  .review button { flex: 1 1 30%; padding: 14px 8px; border-radius: 12px; border: 0;
+    font: 600 15px/1 inherit; font-family: inherit; cursor: pointer; background: #2c2c2e; color: #fff; }
+  .review .primary { background: var(--stamp); color: #1a0d00; flex-basis: 100%; }
+  .toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
+    background: rgba(0,0,0,.75); color: #fff; padding: 10px 16px; border-radius: 10px;
+    font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  dialog { border: 0; border-radius: 16px; padding: 20px; width: min(92vw, 420px);
+    background: var(--sheet); color: var(--fg2, var(--fg)); }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  dialog h2 { font-size: 18px; margin: 0 0 14px; }
+  dialog label { display: block; font-size: 14px; margin: 14px 0 6px; }
+  dialog input[type=text] { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--line);
+    font: inherit; background: transparent; color: inherit; }
+  dialog .row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; font-size: 14px; }
+  dialog p { font-size: 13px; color: var(--muted); line-height: 1.6; margin: 6px 0 0; }
+  dialog .done { margin-top: 18px; width: 100%; padding: 12px; border: 0; border-radius: 10px;
+    background: var(--stamp); color: #1a0d00; font: 600 15px/1 inherit; font-family: inherit; }
+  button:focus-visible { outline: 3px solid var(--stamp); outline-offset: 2px; }
+  canvas { display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="viewer">
+    <video id="video" playsinline autoplay muted></video>
+    <img id="shot" class="shot" alt="拍好的照片">
+    <div id="liveStamp" class="live-stamp film"></div>
+    <div id="msg" class="msg"></div>
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <div id="bar" class="bar">
+    <button id="styleBtn" class="side left"><span id="styleChip" class="chip film">底片橘</span></button>
+    <button id="shutter" class="shutter" aria-label="拍照"></button>
+    <button id="settingsBtn" class="side right">設定</button>
+  </div>
+
+  <div id="review" class="review">
+    <button id="saveBtn" class="primary">存入相簿</button>
+    <button id="shareBtn">分享</button>
+    <button id="flipBtn">切換鏡頭</button>
+    <button id="retakeBtn">重拍</button>
+  </div>
+</div>
+
+<dialog id="settings">
+  <h2>設定</h2>
+  <label for="scName">捷徑名稱</label>
+  <input id="scName" type="text" autocomplete="off">
+  <p>要和「捷徑」App 裡的名稱完全一樣。捷徑內容：「取得剪貼簿」→「儲存到照片相簿」。</p>
+  <div class="row"><span>拍完自動存入相簿</span><input id="autoSave" type="checkbox"></div>
+  <div class="row"><span>顯示秒數</span><input id="showSec" type="checkbox"></div>
+  <button class="done" id="closeSettings">完成</button>
+</dialog>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $('video'), canvas = $('canvas'), shot = $('shot');
+let facing = 'environment', stream = null, lastBlob = null, lastTime = null;
+
+// ---- 設定（存在瀏覽器裡）----
+const defaults = { style: 'film', shortcut: '存浮水印照片', autoSave: true, showSec: false };
+let cfg = { ...defaults };
+try { cfg = { ...defaults, ...JSON.parse(localStorage.getItem('stampcam') || '{}') }; } catch (e) {}
+const saveCfg = () => { try { localStorage.setItem('stampcam', JSON.stringify(cfg)); } catch (e) {} };
+
+// ---- 時間格式 ----
+const pad = n => String(n).padStart(2, '0');
+function stampText(d) {
+  const sec = cfg.showSec ? ':' + pad(d.getSeconds()) : '';
+  if (cfg.style === 'film') {
+    return `'${String(d.getFullYear()).slice(2)} ${pad(d.getMonth() + 1)} ${pad(d.getDate())}  ${pad(d.getHours())}:${pad(d.getMinutes())}${sec}`;
+  }
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}${sec}`;
+}
+
+function refreshStyle() {
+  $('liveStamp').className = 'live-stamp ' + cfg.style;
+  $('styleChip').className = 'chip ' + cfg.style;
+  $('styleChip').textContent = cfg.style === 'film' ? '底片橘' : '白字';
+}
+setInterval(() => { $('liveStamp').textContent = stampText(new Date()); }, 500);
+$('liveStamp').textContent = stampText(new Date());
+refreshStyle();
+
+// ---- 相機 ----
+async function startCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false
+    });
+    video.srcObject = stream;
+    $('msg').style.display = 'none';
+  } catch (e) {
+    $('msg').style.display = 'grid';
+    $('msg').textContent = location.protocol !== 'https:' && location.hostname !== 'localhost'
+      ? '相機需要 HTTPS 網址才能開啟。請把這個檔案放到 GitHub Pages 或 Netlify 再打開。'
+      : '無法開啟相機。請到 設定 → Safari → 相機，改成「允許」，再重新整理。';
+  }
+}
+
+// ---- 拍照 + 畫浮水印 ----
+function capture() {
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w) return null;
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (facing === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(video, 0, 0, w, h);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  lastTime = new Date();
+  const text = stampText(lastTime);
+  const size = Math.round(Math.min(w, h) * 0.045);
+  ctx.font = `700 ${size}px ui-monospace, "SF Mono", Menlo, monospace`;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  const x = w - w * 0.05, y = h - h * 0.04;
+  if (cfg.style === 'film') {
+    ctx.fillStyle = '#ff8a1f';
+    ctx.shadowColor = 'rgba(255,110,10,.9)'; ctx.shadowBlur = size * 0.4;
+    ctx.fillText(text, x, y);
+    ctx.shadowBlur = size * 0.15; ctx.fillText(text, x, y);
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = size * 0.3; ctx.shadowOffsetY = size * 0.05;
+    ctx.fillText(text, x, y);
+  }
+  ctx.shadowColor = 'transparent';
+  return new Promise(res => canvas.toBlob(res, 'image/png'));
+}
+
+// ---- 存入相簿：複製到剪貼簿 → 執行捷徑 ----
+async function saveViaShortcut(blobPromise) {
+  try {
+    // Safari 要在點擊當下建立 ClipboardItem，所以直接傳 Promise 進去
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })]);
+  } catch (e) {
+    toast('無法複製照片，請改用「分享」→「儲存影像」');
+    return;
+  }
+  location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(cfg.shortcut);
+}
+
+async function share() {
+  if (!lastBlob) return;
+  const file = new File([lastBlob], `IMG_${lastTime.getTime()}.png`, { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); } catch (e) {}
+  } else {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(lastBlob); a.download = file.name; a.click();
+  }
+}
+
+function showReview(on) {
+  shot.style.display = on ? 'block' : 'none';
+  $('liveStamp').style.display = on ? 'none' : 'block';
+  $('bar').style.display = on ? 'none' : 'grid';
+  $('review').style.display = on ? 'flex' : 'none';
+}
+
+let toastTimer;
+function toast(t) {
+  const el = $('toast'); el.textContent = t; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ---- 按鈕 ----
+$('shutter').onclick = () => {
+  const p = capture();
+  if (!p) return;
+  const keep = p.then(b => { lastBlob = b; shot.src = URL.createObjectURL(b); showReview(true); return b; });
+  if (cfg.autoSave) saveViaShortcut(keep);
+};
+$('saveBtn').onclick = () => saveViaShortcut(Promise.resolve(lastBlob));
+$('shareBtn').onclick = share;
+$('retakeBtn').onclick = () => showReview(false);
+$('flipBtn').onclick = () => { facing = facing === 'environment' ? 'user' : 'environment'; showReview(false); startCamera(); };
+$('styleBtn').onclick = () => { cfg.style = cfg.style === 'film' ? 'clean' : 'film'; saveCfg(); refreshStyle(); };
+
+$('settingsBtn').onclick = () => {
+  $('scName').value = cfg.shortcut; $('autoSave').checked = cfg.autoSave; $('showSec').checked = cfg.showSec;
+  $('settings').showModal();
+};
+$('closeSettings').onclick = () => {
+  cfg.shortcut = $('scName').value.trim() || defaults.shortcut;
+  cfg.autoSave = $('autoSave').checked; cfg.showSec = $('showSec').checked;
+  saveCfg(); $('settings').close();
+};
+
+// 從捷徑回來時重新開相機
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (!stream || !stream.active)) startCamera();
+});
+
+startCamera();
+
+// 離線快取
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
